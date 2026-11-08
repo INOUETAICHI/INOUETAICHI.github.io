@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>電流センサ 2点キャリブレーター | BF・INAV・ArduPilot・PX4</title>
+<style>
+  :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;color-scheme:light;--bg:#f4f6fa;--surface:#fff;--text:#17253b;--muted:#68778b;--line:#dce3ee;--blue:#255ed6;--blueTint:#edf3ff;--warn:#865200;--warnTint:#fff5de;--red:#b3293b;--redTint:#ffebee;--shadow:0 12px 40px rgba(31,50,80,.045)}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}
+  .container{max-width:1000px;margin:0 auto;padding:34px 22px 54px}
+  .eyebrow{font-size:11px;font-weight:750;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
+  h1{font-size:clamp(24px,3.4vw,32px);line-height:1.3;letter-spacing:-.03em;margin:9px 0 10px}
+  .lead{color:var(--muted);font-size:14px;line-height:1.7;max-width:820px;margin:0 0 25px}
+  .card{border:1px solid var(--line);border-radius:15px;background:var(--surface);padding:23px;box-shadow:var(--shadow)}
+  .card+.card{margin-top:16px}
+  .tag{display:inline-block;background:var(--blueTint);color:var(--blue);border-radius:50px;padding:5px 9px;font-size:11px;font-weight:750}
+  .select-row{display:flex;gap:15px;justify-content:space-between;align-items:end;flex-wrap:wrap}
+  .select-row label{flex:1;min-width:240px;max-width:460px}
+  h2{font-size:16px;line-height:1.3;letter-spacing:-.01em;margin:0 0 17px}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;margin-right:9px;border-radius:7px;color:var(--blue);background:var(--blueTint);font-size:13px}
+  .label{display:block;font-size:12px;font-weight:700;margin-bottom:8px;color:#41516a}
+  input,select{width:100%;font:inherit;font-variant-numeric:tabular-nums;border:1px solid #cdd6e3;color:var(--text);border-radius:9px;height:45px;padding:0 12px;background:#fff;outline:0;transition:box-shadow .1s,border-color .1s}
+  input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,94,214,.13)}
+  input::placeholder{color:#abb5c1}
+  .section-caption{font-size:12px;line-height:1.6;color:var(--muted);margin:11px 0 0}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;align-items:start}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .hint{font-size:12px;color:var(--muted);line-height:1.55;margin-top:8px;min-height:18px}
+  .measure-head{display:grid;grid-template-columns:64px 1fr 1fr;gap:10px;margin-bottom:9px;color:#66778d;font-size:12px;font-weight:700}
+  .measure-row{display:grid;grid-template-columns:64px 1fr 1fr;gap:10px;align-items:center;margin-bottom:9px}
+  .index{font-weight:750;font-size:12px;color:#41516a;background:#f0f3f8;padding:8px 4px;text-align:center;border-radius:7px}
+  .measure-row input{min-width:0}
+  .toolbar{display:flex;gap:9px;flex-wrap:wrap;margin-top:21px}
+  button{font:inherit;cursor:pointer;border:1px solid #c9d4e5;border-radius:9px;background:white;color:#34445e;padding:10px 14px;font-size:13px;font-weight:700;transition:background .1s,transform .1s}
+  button:hover{background:#f3f7ff}button:active{transform:translateY(1px)}button.primary{background:var(--blue);color:white;border-color:var(--blue)}button.primary:hover{background:#1c4cb7}button:disabled{opacity:.4;cursor:not-allowed}
+  .result-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .results{border:1px solid #c7d6ee;background:linear-gradient(160deg,#f7faff 0%,#fff 64%)}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+  .metric{border:1px solid var(--line);border-radius:11px;background:#fff;padding:16px;min-width:0}
+  .metric-label{font-size:12px;font-weight:750;color:#52657d;overflow-wrap:anywhere}
+  .metric-value{font-size:clamp(22px,3.1vw,29px);font-weight:800;letter-spacing:-.035em;margin-top:8px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+  .metric-meta{font-size:12px;color:var(--muted);margin-top:6px}
+  .state{font-size:13px;color:var(--muted);line-height:1.7;margin-top:12px;min-height:26px}
+  .state.error{color:var(--red);background:var(--redTint);padding:10px 12px;border-radius:8px}.state.warn{color:var(--warn);background:var(--warnTint);padding:10px 12px;border-radius:8px}
+  .code-header{display:flex;align-items:center;justify-content:space-between;margin-top:20px;gap:12px}
+  .code-header h3{font-size:13px;margin:0}
+  pre{border-radius:10px;background:#18283c;color:#edf4ff;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;margin:9px 0 0;font-variant-numeric:tabular-nums;min-height:74px}
+  table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:12px;margin-top:10px}th,td{text-align:right;border-bottom:1px solid var(--line);padding:10px 6px}th:first-child,td:first-child{text-align:left}th{font-weight:700;color:#63748a}
+  .subheading{font-weight:750;font-size:13px;margin-top:19px}
+  .formula{background:#f4f6f9;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.8;color:#485971;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+  .sources{font-size:12px;line-height:1.85;color:#66788c;margin-top:18px} .sources a{color:#285bc9;text-decoration:none}.sources a:hover{text-decoration:underline}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .foot{font-size:12px;color:var(--muted);line-height:1.7;margin-top:18px}
+  @media(max-width:710px){.container{padding:22px 13px 35px}.two-col{grid-template-columns:1fr;gap:13px}.card{padding:17px}.measure-head,.measure-row{grid-template-columns:52px 1fr 1fr;gap:7px}.metrics{gap:9px}.metric{padding:12px}.metric-value{font-size:23px}.select-row label{min-width:190px}}
+  @media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#101721;--surface:#1b2634;--text:#edf3ff;--muted:#a2b0c3;--line:#344357;--blue:#83afff;--blueTint:#233e61;--warn:#ffcc82;--warnTint:#49391e;--red:#ff9ca4;--redTint:#522c33;--shadow:none}input,select{color:var(--text);background:#182332;border-color:#445671}input::placeholder{color:#718298}.label{color:#c1cede}.hint,.section-caption,.state{color:var(--muted)}.metrics .metric{background:#1b2634}.results{border-color:#354e74;background:linear-gradient(155deg,#233249,#1b2634)}.index,.formula{background:#273548;color:#c1cede}button{background:#263446;border-color:#465a75;color:#deebff}button:hover{background:#31445d}.metric-label{color:#b2c4d8}.metric-meta,.measure-head{color:#9cacc2}.sources a{color:#92b8ff}pre{background:#111a25;color:#e3ebf5}}
+</style>
+</head>
+<body>
+<main class="container">
+  <div class="eyebrow">DRONE / POWER TOOLS</div>
+  <h1>電流センサ 2点キャリブレーター</h1>
+  <p class="lead">FCが表示する電流と電流計の実測値を、異なる負荷で2組入力します。今のスケール・オフセットから、補正後の設定値を計算します。BF / INAV / ArduPilot / PX4 の <strong>アナログADC電流センサ</strong>に対応。データは端末内で処理し、送信しません。</p>
+
+  <section class="card">
+    <div class="select-row">
+      <label><span class="label">対象ファームウェア</span>
+        <select id="firmware" aria-label="対象ファームウェア">
+          <option value="bf">Betaflight（4.4〜2026.6）</option>
+          <option value="inav">INAV</option>
+          <option value="ardu">ArduPilot（Analog current）</option>
+          <option value="px4">PX4（Analog power module）</option>
+        </select>
+      </label>
+      <div><span class="tag">2点・スケール＆オフセット同時推定</span></div>
+    </div>
+    <div id="monitor-wrap" style="display:none;max-width:230px;margin-top:15px">
+      <label for="monitor" class="label">バッテリー番号</label>
+      <select id="monitor">
+        <option value="1">Battery 1</option><option value="2">Battery 2</option><option value="3">Battery 3</option><option value="4">Battery 4</option>
+      </select>
+    </div>
+    <p class="section-caption" id="platform-description" aria-live="polite"></p>
+  </section>
+
+  <div class="two-col">
+    <section class="card" style="margin-top:0">
+      <h2><span class="n">1</span>現在の設定値</h2>
+      <div class="pair">
+        <label><span class="label" id="scale-key">Scale</span><input type="number" step="any" id="old-scale" inputmode="decimal" placeholder="現在値を入力" autocomplete="off"></label>
+        <label><span class="label" id="offset-key">Offset</span><input type="number" step="any" id="old-offset" inputmode="decimal" placeholder="現在値を入力" autocomplete="off"></label>
+      </div>
+      <div class="hint" id="setting-hint"></div>
+    </section>
+    <section class="card" style="margin-top:0">
+      <h2><span class="n">2</span>電流の測定値</h2>
+      <div class="measure-head"><span></span><span>FC表示電流 (A)</span><span>実測電流 (A)</span></div>
+      <div class="measure-row"><span class="index">点 1</span><input type="number" step="any" id="display-1" inputmode="decimal" placeholder="例: 1.0" aria-label="点1 FC表示電流 A"><input type="number" step="any" id="actual-1" inputmode="decimal" placeholder="例: 1.5" aria-label="点1 実測電流 A"></div>
+      <div class="measure-row"><span class="index">点 2</span><input type="number" step="any" id="display-2" inputmode="decimal" placeholder="例: 10.0" aria-label="点2 FC表示電流 A"><input type="number" step="any" id="actual-2" inputmode="decimal" placeholder="例: 12.5" aria-label="点2 実測電流 A"></div>
+      <p class="hint">同じ瞬間のFC表示値と電流計の値を組にしてください。2点は十分に離れた電流域で測定します。</p>
+    </section>
+  </div>
+
+  <div class="toolbar"><button class="primary" id="calculate">補正値を計算</button><button id="sample">サンプル値を入力</button><button id="clear">入力をクリア</button></div>
+
+  <section class="card results" style="margin-top:16px" aria-live="polite">
+    <div class="result-head"><h2 style="margin:0"><span class="n">3</span>補正後の設定値</h2><span class="tag" id="status-tag">未計算</span></div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label" id="out-scale-key">Scale</div><div class="metric-value" id="result-scale">—</div><div class="metric-meta" id="scale-meta">現在値 —</div></div>
+      <div class="metric"><div class="metric-label" id="out-offset-key">Offset</div><div class="metric-value" id="result-offset">—</div><div class="metric-meta" id="offset-meta">現在値 —</div></div>
+    </div>
+    <div id="state" class="state">必要な値を入力して「補正値を計算」を押してください。</div>
+    <div id="result-detail" hidden>
+      <div class="code-header"><h3 id="commands-title">設定値</h3><button id="copy" type="button">設定値をコピー</button></div>
+      <pre id="commands" aria-label="適用する設定値"></pre>
+      <div class="subheading">補正後の再計算（丸め込み後）</div>
+      <table><thead><tr><th>測定点</th><th>実測</th><th>補正後表示</th><th>誤差</th></tr></thead><tbody id="verification"></tbody></table>
+      <p class="section-caption" id="line-fit"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>計算の仕組み</h2>
+    <p class="section-caption" style="margin:0 0 10px">2組の測定から、表示電流 D を実測電流 I に変換する直線 <span class="mono">I = a·D + b</span> を求めます。ファームごとのADC換算式を逆算して、新しいパラメータに置き換えます。</p>
+    <div class="formula" id="formula"></div>
+    <p class="section-caption" id="formula-notes"></p>
+    <div class="sources">ソースコード・公式資料：<br>
+      <a href="https://github.com/betaflight/betaflight/blob/2026.6.2/src/main/sensors/current.c" target="_blank" rel="noreferrer">Betaflight ADC電流換算</a> ·
+      <a href="https://github.com/iNavFlight/inav/blob/master/src/main/sensors/battery.c" target="_blank" rel="noreferrer">INAV ADC電流換算</a> ·
+      <a href="https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_BattMonitor/AP_BattMonitor_Analog.cpp" target="_blank" rel="noreferrer">ArduPilot Analog電流換算</a> ·
+      <a href="https://github.com/PX4/PX4-Autopilot/blob/main/src/modules/battery_status/analog_battery.cpp" target="_blank" rel="noreferrer">PX4 Analog Battery電流換算</a>
+    </div>
+  </section>
+  <p class="foot">注意：ESCテレメトリ、MSP/CAN/SMBus、仮想電流センサには適用できません。測定中はプロペラを取り外してください。電流表示には平滑化やクリップ処理があるため、値が安定した状態で比較し、適用後に第三の負荷でも再確認してください。単一HTMLでオフライン動作します。</p>
+</main>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+const specs={
+ bf:{name:'Betaflight',scale:'ibata_scale',offset:'ibata_offset',desc:'ADCセンサの換算式： I[A] = 10 × ADC[mV] / Scale + Offset / 1000。Offsetは出力電流に加算するmA値です。',hint:'Scale: 0.1 mV/A（整数） ／ Offset: mA（整数）。BF 4.4.3 / 2026.6 で同じ換算式。',formula:'I = 10·V[mV] / S + O / 1000\nSnew = Sold / a\nOnew = a·Oold + 1000·b',notes:'Scaleと電流は反比例。Offsetは電流値（mA）を直接加算します。',integer:true,scaleRange:[-16000,16000],offsetRange:[-32000,32000]},
+ inav:{name:'INAV',scale:'current_meter_scale',offset:'current_meter_offset',desc:'ADCセンサの換算式： I[A] = (10 × ADC[mV] − Offset) / Scale。Offsetは電流そのものではなくADC側で差し引く量です。',hint:'Scale: 0.1 mV/A（整数） ／ Offset: ファームウェア整数値。仮想電流センサとは計算式が異なります。',formula:'I = (10·V[mV] − O) / S\nSnew = Sold / a\nOnew = Oold − b·Snew',notes:'INAV実装ではOffset×100 µVをADC換算値から減算しています（実効的に0.1 mV単位）。文書には「mV」と記載されているため、ここではファームウェアの整数値をそのまま扱います。',integer:true,scaleRange:[-10000,10000],offsetRange:[-32768,32767]},
+ ardu:{name:'ArduPilot',scale:'BATT_AMP_PERVLT',offset:'BATT_AMP_OFFSET',desc:'アナログ電流センサ専用： I[A] = (ADC[V] − Offset[V]) × Scale[A/V]。仮想電流センサ（BATT_MONITOR=25）などには非対応。',hint:'Scale: A/V（小数可） ／ Offset: V（小数可）。BATT_MONITORがアナログ電流センサのときに使用。',formula:'I = (V[V] − O[V]) · S[A/V]\nSnew = a·Sold\nOnew = Oold − b / Snew',notes:'オフセットはセンサ電圧のゼロ点。Battery 2以降は BATT2_... のように表記します。',integer:false},
+ px4:{name:'PX4',scale:'BAT1_A_PER_V',offset:'BAT_V_OFFS_CURR',desc:'アナログ電流センサ専用： I[A] = (ADC[V] − BAT_V_OFFS_CURR[V]) × BATn_A_PER_V[A/V]。電圧オフセットはBattery 1/2で共通です。',hint:'Scale: A/V（小数可） ／ Offset: V（小数可）。Scaleが −1（基板のデフォルトを使う）の場合は実際の有効値が必要です。',formula:'I = (V[V] − O[V]) · S[A/V]\nSnew = a·Sold\nOnew = Oold − b / Snew',notes:'PX4の BAT_V_OFFS_CURR はバッテリー間で共有されます。2個の電流センサに異なるオフセットが必要なら、同時に独立補正することはできません。',integer:false}
+};
+let commandText='',computed=null;
+function keyNames(){const fw=$('firmware').value,sp=specs[fw],mon=$('monitor').value;return {scale:fw==='ardu'?(mon==='1'?'BATT_AMP_PERVLT':`BATT${mon}_AMP_PERVLT`):fw==='px4'?`BAT${mon}_A_PER_V`:sp.scale,offset:sp.offset};}
+function updatePlatform(){const fw=$('firmware').value,sp=specs[fw],names=keyNames();$('monitor-wrap').style.display=(fw==='ardu'||fw==='px4')?'block':'none';const mon=$('monitor');for(const opt of mon.options)opt.hidden=fw==='px4' && Number(opt.value)>2;if(fw==='px4' && Number(mon.value)>2)mon.value='1';const updated=keyNames();for(const [id,value] of [['scale-key',updated.scale],['offset-key',updated.offset],['out-scale-key',updated.scale],['out-offset-key',updated.offset]])$(id).textContent=value;$('platform-description').textContent=sp.desc;$('setting-hint').textContent=sp.hint;$('formula').textContent='a = (実測2 − 実測1) / (表示2 − 表示1)\nb = 実測1 − a × 表示1\n\n'+sp.formula;$('formula-notes').textContent=sp.notes; $('commands-title').textContent=(fw==='bf'||fw==='inav')?'CLI設定値':'パラメータ設定値';}
+function num(id){const s=$(id).value.trim();return s===''?null:Number(s);}
+function fmt(n,d=6){if(!Number.isFinite(n))return '—';if(Math.abs(n)<1e-12)n=0;return n.toLocaleString('en-US',{useGrouping:false,maximumFractionDigits:d});}
+function setError(message){computed=null;commandText='';$('result-scale').textContent='—';$('result-offset').textContent='—';$('scale-meta').textContent='現在値 —';$('offset-meta').textContent='現在値 —';$('result-detail').hidden=true;$('status-tag').textContent='要確認';$('state').className='state error';$('state').textContent=message;}
+function resetResult(){computed=null;commandText='';$('result-scale').textContent='—';$('result-offset').textContent='—';$('scale-meta').textContent='現在値 —';$('offset-meta').textContent='現在値 —';$('result-detail').hidden=true;$('status-tag').textContent='未計算';$('state').className='state';$('state').textContent='必要な値を入力して「補正値を計算」を押してください。';}
+function calc(){
+const fw=$('firmware').value,sp=specs[fw],names=keyNames();const oldS=num('old-scale'),oldO=num('old-offset'),d1=num('display-1'),m1=num('actual-1'),d2=num('display-2'),m2=num('actual-2');
+const numbers=[oldS,oldO,d1,m1,d2,m2];if(numbers.some(v=>v===null)){resetResult();return;}
+if(numbers.some(v=>!Number.isFinite(v))){setError('数値として解釈できない入力があります。');return;}
+if(oldS===0||(fw==='px4'&&oldS===-1)){setError(fw==='px4'?'PX4のScale = −1 は基板デフォルト使用の指定です。実際に使われている有効なA/V値を入力してください。':'現在のScaleが0です。センサが無効か設定値が不正です。');return;}
+if(Math.abs(d2-d1)<1e-8){setError('2点のFC表示電流が同じため、傾きを計算できません。異なる負荷で測定してください。');return;}
+const a=(m2-m1)/(d2-d1),b=m1-a*d1;if(!Number.isFinite(a)||!Number.isFinite(b)||a<=0){setError('実測電流と表示電流の関係が正の傾きになっていません。2組の測定値と入力順を確認してください。');return;}
+let s,o;if(fw==='bf'){s=oldS/a;o=a*oldO+1000*b;}else if(fw==='inav'){s=oldS/a;o=oldO-b*s;}else{s=oldS*a;if(!s){setError('スケールがゼロとなるため、計算できません。');return;}o=oldO-b/s;}
+if(!Number.isFinite(s)||!Number.isFinite(o)){setError('補正後の設定値が計算できません。入力値を確認してください。');return;}
+let sApply=sp.integer?Math.round(s):Number(s.toPrecision(12));let oApply=sp.integer?Math.round(o):Number(o.toPrecision(12));
+if(sApply===0){setError('丸めたScaleが0になるため適用できません。測定点または現在のScaleを確認してください。');return;}
+if(sp.integer && (sApply<sp.scaleRange[0]||sApply>sp.scaleRange[1]||oApply<sp.offsetRange[0]||oApply>sp.offsetRange[1])){setError('計算値がファームウェアのCLI設定範囲を超えています。別の測定点・センサ・配線をご確認ください。');return;}
+function predicted(display){if(fw==='bf')return ((display-oldO/1000)*oldS/sApply)+oApply/1000;if(fw==='inav')return (display*oldS+oldO-oApply)/sApply;return ((display/oldS)+oldO-oApply)*sApply;}
+let p1=predicted(d1),p2=predicted(d2);
+let warning='';if(Math.abs(d2-d1)<0.5)warning='測定点の表示電流差が0.5A未満です。量子化・平滑化の影響を受けやすいため、負荷差を大きくして再測定を推奨します。';
+if((a<0.1||a>10)&&!warning)warning='倍率補正が10倍超または1/10未満です。センサ種別や測定値を再確認してください。';
+if(sp.integer && (Math.abs(p1-m1)>.1||Math.abs(p2-m2)>.1))warning=warning+' 整数設定への丸め込みによる誤差が大きいため、補正後も実測確認してください。';
+$('result-scale').textContent=fmt(sApply,8);$('result-offset').textContent=fmt(oApply,8);$('scale-meta').textContent=`現在値 ${fmt(oldS)} / 理論値 ${fmt(s,8)}`;$('offset-meta').textContent=`現在値 ${fmt(oldO)} / 理論値 ${fmt(o,8)}`;
+$('state').className=warning?'state warn':'state';$('state').textContent=warning||'計算完了。丸め込み後の設定値で2点を再計算しました。';$('status-tag').textContent=warning?'計算済・注意':'計算済';
+const ss=fmt(sApply,9),os=fmt(oApply,9);
+commandText=(fw==='bf'||fw==='inav')?`set ${names.scale} = ${ss}\nset ${names.offset} = ${os}\nsave`:`${names.scale} = ${ss}\n${names.offset} = ${os}`;
+$('commands').textContent=commandText;
+$('verification').replaceChildren();[[1,m1,p1],[2,m2,p2]].forEach(([i,m,p])=>{const tr=document.createElement('tr');[`${i}`,`${fmt(m,4)} A`,`${fmt(p,4)} A`,`${fmt(p-m,4)} A`].forEach(txt=>{const td=document.createElement('td');td.textContent=txt;tr.append(td)});$('verification').append(tr)});
+$('line-fit').textContent=`表示 D → 実測 I : I = ${fmt(a,8)} × D ${b<0?'−':'+'} ${fmt(Math.abs(b),8)} [A]。`; $('result-detail').hidden=false;computed={fw,s:sApply,o:oApply,a,b};
+}
+$('firmware').addEventListener('change',()=>{updatePlatform();$('old-scale').value='';$('old-offset').value='';resetResult();});
+$('monitor').addEventListener('change',()=>{updatePlatform();resetResult();});
+$('calculate').addEventListener('click',calc);
+$('sample').addEventListener('click',()=>{const fw=$('firmware').value; $('old-scale').value=(fw==='bf'||fw==='inav')?400:17;$('old-offset').value=(fw==='bf'||fw==='inav')?0:.1;$('display-1').value=1;$('actual-1').value=1.5;$('display-2').value=10;$('actual-2').value=12.5;calc();});
+$('clear').addEventListener('click',()=>{['old-scale','old-offset','display-1','actual-1','display-2','actual-2'].forEach(id=>$(id).value='');resetResult();});
+for(const id of ['old-scale','old-offset','display-1','actual-1','display-2','actual-2']){$(id).addEventListener('input',()=>{if(computed)calc();});$(id).addEventListener('keydown',e=>{if(e.key==='Enter')calc();});}
+$('copy').addEventListener('click',async()=>{if(!commandText)return;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(commandText);}else{const a=document.createElement('textarea');a.value=commandText;a.style.position='absolute';a.style.left='-9999px';document.body.append(a);a.select();if(!document.execCommand('copy'))throw new Error('copy failed');a.remove();}$('copy').textContent='コピーしました';setTimeout(()=>$('copy').textContent='設定値をコピー',1500);}catch(e){$('copy').textContent='コピー不可：選択して複製';setTimeout(()=>$('copy').textContent='設定値をコピー',2400);}});
+updatePlatform();resetResult();
+})();
+</script>
+</body>
+</html>
