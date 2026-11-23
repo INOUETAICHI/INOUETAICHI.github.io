@@ -92,6 +92,13 @@
         <label><span class="label" id="scale-key">Scale</span><input type="number" step="any" id="old-scale" inputmode="decimal" placeholder="現在値を入力" autocomplete="off"></label>
         <label><span class="label" id="offset-key">Offset</span><input type="number" step="any" id="old-offset" inputmode="decimal" placeholder="現在値を入力" autocomplete="off"></label>
       </div>
+      <div id="inav-offset-source-wrap" style="display:none;margin-top:13px">
+        <label for="inav-offset-source" class="label">INAV ADC：現在のOffsetをどこから読み取ったか</label>
+        <select id="inav-offset-source">
+          <option value="gui">Configurator GUI（mV、例：4.3）</option>
+          <option value="cli">CLI（整数、例：43）</option>
+        </select>
+      </div>
       <div class="hint" id="setting-hint"></div>
     </section>
     <section class="card" style="margin-top:0">
@@ -112,6 +119,7 @@
       <div class="metric"><div class="metric-label" id="out-offset-key">Offset</div><div class="metric-value" id="result-offset">—</div><div class="metric-meta" id="offset-meta">現在値 —</div></div>
     </div>
     <div id="state" class="state">必要な値を入力して「補正値を計算」を押してください。</div>
+    <div class="hint" id="offset-conversion" hidden></div>
     <div id="result-detail" hidden>
       <div class="code-header"><h3 id="commands-title">設定値</h3><button id="copy" type="button">設定値をコピー</button></div>
       <pre id="commands" aria-label="適用する設定値"></pre>
@@ -129,6 +137,7 @@
     <div class="sources">ソースコード・公式資料：<br>
       <a href="https://github.com/betaflight/betaflight/blob/2026.6.2/src/main/sensors/current.c" target="_blank" rel="noreferrer">Betaflight ADC電流換算</a> ·
       <a href="https://github.com/iNavFlight/inav/blob/9.1.0/src/main/sensors/battery.c" target="_blank" rel="noreferrer">INAV ADC/VIRTUAL電流換算</a> ·
+      <a href="https://github.com/iNavFlight/inav-configurator/blob/9.1.0/tabs/configuration.js" target="_blank" rel="noreferrer">INAV Configurator GUI↔CLI Offset換算</a> ·
       <a href="https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_BattMonitor/AP_BattMonitor_Analog.cpp" target="_blank" rel="noreferrer">ArduPilot Analog電流換算</a> ·
       <a href="https://github.com/PX4/PX4-Autopilot/blob/main/src/modules/battery_status/analog_battery.cpp" target="_blank" rel="noreferrer">PX4 Analog Battery電流換算</a>
     </div>
@@ -141,22 +150,24 @@
 const $=id=>document.getElementById(id);
 const specs={
  bf:{name:'Betaflight',scale:'ibata_scale',offset:'ibata_offset',desc:'ADCセンサの換算式： I[A] = 10 × ADC[mV] / Scale + Offset / 1000。Offsetは電流（mA）を直接加算します。',hint:'Scale: 0.1 mV/A（整数） ／ Offset: mA（整数）。0.43Aは430mAであり、43ではありません。',formula:'I = 10·V[mV] / S + O / 1000\nSnew = Sold / a\nOnew = a·Oold + 1000·b',notes:'誤差が電流域によらず+0.43Aなら、Scale不変・Offsetを+430mAします。2点の傾きも補正する場合、Offsetは切片bと旧Offsetの両方に依存し、単なる測定点の差分×1000とは限りません。',integer:true,scaleRange:[-16000,16000],offsetRange:[-32000,32000]},
- inav:{name:'INAV',scale:'current_meter_scale',offset:'current_meter_offset',desc:'ADCセンサの換算式： I[A] = (10 × ADC[mV] − Offset) / Scale。Offsetは電流ではなくセンサ電圧のゼロ点です。',hint:'Scale: 0.1 mV/A（整数） ／ Offset: 0.1 mV/step（整数・ADC実装準拠）。電流AやmAの値をそのまま入力しません。',formula:'I = (10·V[mV] − O) / S\nSnew = Sold / a\nOnew = Oold − b·Snew\n適用時：Scale整数化後にOffsetを再計算',notes:'例：Scale=179で電流表示が0.43A低い場合、Scale不変ならOffsetを約−77ステップ（−7.7mV）変更します。INAV 9.0.1/9.1.0のADC実装は電圧オフセットを100µV単位で差し引きます。',integer:true,scaleRange:[-10000,10000],offsetRange:[-32768,32767]},
+ inav:{name:'INAV',scale:'current_meter_scale',offset:'current_meter_offset',desc:'ADCセンサの換算式： I[A] = (10 × ADC[mV] − Offset) / Scale。Offsetは電流ではなくセンサ電圧のゼロ点です。',hint:'INAV ADCのOffsetはGUIではmV（4.3）、CLIでは0.1mV単位の整数（43）。入力元を選んでください。ScaleはGUI/CLI共通の整数です。',formula:'I = (10·V[mV] − O) / S\nSnew = Sold / a\nOnew = Oold − b·Snew\n適用時：Scale整数化後にOffsetを再計算',notes:'INAV Configurator（9.0.1〜9.1.1）のGUIは内部のOffsetを10で割ってmV表示、保存時はGUI値を10倍して整数化します。FC内部とCLIでは0.1mV単位です。',integer:true,scaleRange:[-10000,10000],offsetRange:[-32768,32767]},
  inavvirtual:{name:'INAV VIRTUAL',scale:'current_meter_scale',offset:'current_meter_offset',desc:'VIRTUAL方式：電流表示[A] = current_meter_offset / 100 + スロットル係数 × current_meter_scale。ADC方式と異なり、Offsetは0.01A単位の電流値です。',hint:'Scale: スロットルからの電流倍率（整数） ／ Offset: 0.01A単位（整数）。0.43Aは43ステップ。current_meter_type = VIRTUALのときのみ選択。',formula:'I = O / 100 + K·S\nSnew = a·Sold\nOnew = a·Oold + 100·b\n適用時：Scale整数化後にOffsetを再計算',notes:'INAV 9.1.0のVIRTUAL実装ではOffsetはcentiampere（0.01A）です。実測が表示より一定で0.43A大きければ、Offsetを+43増やします。ADC方式とは異なります。',integer:true,scaleRange:[-10000,10000],offsetRange:[-32768,32767]},
  ardu:{name:'ArduPilot',scale:'BATT_AMP_PERVLT',offset:'BATT_AMP_OFFSET',desc:'アナログ電流センサ専用： I[A] = (ADC[V] − Offset[V]) × Scale[A/V]。仮想電流センサ（BATT_MONITOR=25）などには非対応。',hint:'Scale: A/V（小数可） ／ Offset: V（小数可）。BATT_MONITORがアナログ電流センサのときに使用。',formula:'I = (V[V] − O[V]) · S[A/V]\nSnew = a·Sold\nOnew = Oold − b / Snew',notes:'オフセットはセンサ電圧のゼロ点。Battery 2以降は BATT2_... のように表記します。',integer:false},
  px4:{name:'PX4',scale:'BAT1_A_PER_V',offset:'BAT_V_OFFS_CURR',desc:'アナログ電流センサ専用： I[A] = (ADC[V] − BAT_V_OFFS_CURR[V]) × BATn_A_PER_V[A/V]。電圧オフセットはBattery 1/2で共通です。',hint:'Scale: A/V（小数可） ／ Offset: V（小数可）。Scaleが −1（基板のデフォルトを使う）の場合は実際の有効値が必要です。',formula:'I = (V[V] − O[V]) · S[A/V]\nSnew = a·Sold\nOnew = Oold − b / Snew',notes:'PX4の BAT_V_OFFS_CURR はバッテリー間で共有されます。2個の電流センサに異なるオフセットが必要なら、同時に独立補正することはできません。',integer:false}
 };
 let commandText='',computed=null;
 function keyNames(){const fw=$('firmware').value,sp=specs[fw],mon=$('monitor').value;return {scale:fw==='ardu'?(mon==='1'?'BATT_AMP_PERVLT':`BATT${mon}_AMP_PERVLT`):fw==='px4'?`BAT${mon}_A_PER_V`:sp.scale,offset:sp.offset};}
-function updatePlatform(){const fw=$('firmware').value,sp=specs[fw],names=keyNames();$('monitor-wrap').style.display=(fw==='ardu'||fw==='px4')?'block':'none';const mon=$('monitor');for(const opt of mon.options)opt.hidden=fw==='px4' && Number(opt.value)>2;if(fw==='px4' && Number(mon.value)>2)mon.value='1';const updated=keyNames();for(const [id,value] of [['scale-key',updated.scale],['offset-key',updated.offset],['out-scale-key',updated.scale],['out-offset-key',updated.offset]])$(id).textContent=value;$('platform-description').textContent=sp.desc;$('offset-unit-example').textContent=fw==='bf'?'例：実測電流がFC表示より常に0.43A大きければ、ibata_offsetを430mA増やします（旧値0 → 新値430）。':fw==='inav'?'例：ADC方式でScale=179、実測がFC表示より常に0.43A大きければ、current_meter_offsetを約77ステップ減らします（旧値0 → 新値−77）。':fw==='inavvirtual'?'例：VIRTUAL方式で実測が表示より常に0.43A大きければ、current_meter_offsetを43増やします（旧値0 → 新値43）。':'OffsetはADC側の電圧ゼロ点です。電流の差分[A]をそのままOffsetへ入力しません。';$('setting-hint').textContent=sp.hint;$('formula').textContent='a = (実測2 − 実測1) / (表示2 − 表示1)\nb = 実測1 − a × 表示1\n\n'+sp.formula;$('formula-notes').textContent=sp.notes; $('commands-title').textContent=(fw==='bf'||fw==='inav'||fw==='inavvirtual')?'CLI設定値':'パラメータ設定値';}
+function updatePlatform(){const fw=$('firmware').value,sp=specs[fw],names=keyNames();$('inav-offset-source-wrap').style.display=fw==='inav'?'block':'none';$('monitor-wrap').style.display=(fw==='ardu'||fw==='px4')?'block':'none';const mon=$('monitor');for(const opt of mon.options)opt.hidden=fw==='px4' && Number(opt.value)>2;if(fw==='px4' && Number(mon.value)>2)mon.value='1';const updated=keyNames();for(const [id,value] of [['scale-key',updated.scale],['offset-key',updated.offset],['out-scale-key',updated.scale],['out-offset-key',updated.offset]])$(id).textContent=value;if(fw==='inav'){$('offset-key').textContent=sp.offset+($('inav-offset-source').value==='gui'?'（GUI・mV）':'（CLI・整数）');$('out-offset-key').textContent=sp.offset+'（GUI・mV）';}$('platform-description').textContent=sp.desc;$('offset-unit-example').textContent=fw==='bf'?'例：実測電流がFC表示より常に0.43A大きければ、ibata_offsetを430mA増やします（旧値0 → 新値430）。':fw==='inav'?'例：FC表示0.60A/1.24A、実測0.17A/0.79A、Scale 100、Offset 0の場合、補正後はGUI 4.3mV／CLI 43（Scale 103）です。':fw==='inavvirtual'?'例：VIRTUAL方式で実測が表示より常に0.43A大きければ、current_meter_offsetを43増やします（旧値0 → 新値43）。':'OffsetはADC側の電圧ゼロ点です。電流の差分[A]をそのままOffsetへ入力しません。';$('setting-hint').textContent=sp.hint;$('formula').textContent='a = (実測2 − 実測1) / (表示2 − 表示1)\nb = 実測1 − a × 表示1\n\n'+sp.formula;$('formula-notes').textContent=sp.notes; $('commands-title').textContent=(fw==='bf'||fw==='inav'||fw==='inavvirtual')?'CLI設定値':'パラメータ設定値';}
 function num(id){const s=$(id).value.trim();return s===''?null:Number(s);}
 function fmt(n,d=6){if(!Number.isFinite(n))return '—';if(Math.abs(n)<1e-12)n=0;return n.toLocaleString('en-US',{useGrouping:false,maximumFractionDigits:d});}
-function setError(message){computed=null;commandText='';$('result-scale').textContent='—';$('result-offset').textContent='—';$('scale-meta').textContent='現在値 —';$('offset-meta').textContent='現在値 —';$('result-detail').hidden=true;$('status-tag').textContent='要確認';$('state').className='state error';$('state').textContent=message;}
-function resetResult(){computed=null;commandText='';$('result-scale').textContent='—';$('result-offset').textContent='—';$('scale-meta').textContent='現在値 —';$('offset-meta').textContent='現在値 —';$('result-detail').hidden=true;$('status-tag').textContent='未計算';$('state').className='state';$('state').textContent='必要な値を入力して「補正値を計算」を押してください。';}
+function setError(message){computed=null;commandText='';$('offset-conversion').hidden=true;$('result-scale').textContent='—';$('result-offset').textContent='—';$('scale-meta').textContent='現在値 —';$('offset-meta').textContent='現在値 —';$('result-detail').hidden=true;$('status-tag').textContent='要確認';$('state').className='state error';$('state').textContent=message;}
+function resetResult(){computed=null;commandText='';$('offset-conversion').hidden=true;$('result-scale').textContent='—';$('result-offset').textContent='—';$('scale-meta').textContent='現在値 —';$('offset-meta').textContent='現在値 —';$('result-detail').hidden=true;$('status-tag').textContent='未計算';$('state').className='state';$('state').textContent='必要な値を入力して「補正値を計算」を押してください。';}
 function calc(){
-const fw=$('firmware').value,sp=specs[fw],names=keyNames();const oldS=num('old-scale'),oldO=num('old-offset'),d1=num('display-1'),m1=num('actual-1'),d2=num('display-2'),m2=num('actual-2');
+const fw=$('firmware').value,sp=specs[fw],names=keyNames();const oldS=num('old-scale'),oldOInput=num('old-offset'),oldO=fw==='inav'&&$('inav-offset-source').value==='gui'&&oldOInput!==null?Math.round(oldOInput*10):oldOInput,d1=num('display-1'),m1=num('actual-1'),d2=num('display-2'),m2=num('actual-2');
 const numbers=[oldS,oldO,d1,m1,d2,m2];if(numbers.some(v=>v===null)){resetResult();return;}
 if(numbers.some(v=>!Number.isFinite(v))){setError('数値として解釈できない入力があります。');return;}
+if(fw==='inav' && $('inav-offset-source').value==='gui' && Math.abs(oldOInput*10-Math.round(oldOInput*10))>1e-7){setError('INAV GUIのOffsetは0.1mV刻みです（例：4.3）。');return;}
+if(fw==='inav' && $('inav-offset-source').value==='cli' && !Number.isInteger(oldOInput)){setError('INAV CLIのOffsetは整数で入力してください（例：43）。');return;}
 if(oldS===0||(fw==='px4'&&oldS===-1)){setError(fw==='px4'?'PX4のScale = −1 は基板デフォルト使用の指定です。実際に使われている有効なA/V値を入力してください。':'現在のScaleが0です。センサが無効か設定値が不正です。');return;}
 if(Math.abs(d2-d1)<1e-8){setError('2点のFC表示電流が同じため、傾きを計算できません。異なる負荷で測定してください。');return;}
 const a=(m2-m1)/(d2-d1),b=m1-a*d1;if(!Number.isFinite(a)||!Number.isFinite(b)||a<=0){setError('実測電流と表示電流の関係が正の傾きになっていません。2組の測定値と入力順を確認してください。');return;}
@@ -197,18 +208,42 @@ let p1=predicted(d1),p2=predicted(d2);
 let warning='';if(Math.abs(d2-d1)<0.5)warning='測定点の表示電流差が0.5A未満です。量子化・平滑化の影響を受けやすいため、負荷差を大きくして再測定を推奨します。';
 if((a<0.1||a>10)&&!warning)warning='倍率補正が10倍超または1/10未満です。センサ種別や測定値を再確認してください。';
 if(sp.integer && (Math.abs(p1-m1)>.1||Math.abs(p2-m2)>.1))warning=warning+' 整数設定への丸め込みによる誤差が大きいため、補正後も実測確認してください。';
-$('result-scale').textContent=fmt(sApply,8);$('result-offset').textContent=fmt(oApply,8);$('scale-meta').textContent=`現在値 ${fmt(oldS)} / 理論値 ${fmt(s,8)}`;const delta=oApply-oldO;const sign=delta>0?'+':'';$('offset-meta').textContent=fw==='bf'?`現在値 ${fmt(oldO)} mA → ${fmt(oApply)} mA / 補正量 ${sign}${fmt(delta)} mA`:fw==='inav'?`現在値 ${fmt(oldO)} → ${fmt(oApply)} / 補正量 ${sign}${fmt(delta)} ステップ (${fmt(delta/10,4)} mV)`:fw==='inavvirtual'?`現在値 ${fmt(oldO)} → ${fmt(oApply)} / 補正量 ${sign}${fmt(delta)} ステップ (${fmt(delta/100,4)} A)`:`現在値 ${fmt(oldO)} V → ${fmt(oApply,8)} V / 補正量 ${sign}${fmt(delta,8)} V`;
+$('result-scale').textContent=fmt(sApply,8);$('result-offset').textContent=fw==='inav'?fmt(oApply/10,1):fmt(oApply,8);$('scale-meta').textContent=`現在値 ${fmt(oldS)} / 理論値 ${fmt(s,8)}`;const delta=oApply-oldO;const sign=delta>0?'+':'';$('offset-meta').textContent=fw==='bf'?`現在値 ${fmt(oldO)} mA → ${fmt(oApply)} mA / 補正量 ${sign}${fmt(delta)} mA`:fw==='inav'?`GUI現在値 ${fmt(oldO/10,1)} mV → ${fmt(oApply/10,1)} mV / CLI ${fmt(oldO)} → ${fmt(oApply)}`:fw==='inavvirtual'?`現在値 ${fmt(oldO)} → ${fmt(oApply)} / 補正量 ${sign}${fmt(delta)} ステップ (${fmt(delta/100,4)} A)`:`現在値 ${fmt(oldO)} V → ${fmt(oApply,8)} V / 補正量 ${sign}${fmt(delta,8)} V`;
 $('state').className=warning?'state warn':'state';$('state').textContent=warning||'計算完了。丸め込み後の設定値で2点を再計算しました。';$('status-tag').textContent=warning?'計算済・注意':'計算済';
+if(fw==='inav'){$('offset-conversion').hidden=false;$('offset-conversion').textContent='INAV Configurator GUIに入力：'+fmt(oApply/10,1)+' mV ／ CLIに入力：'+fmt(oApply)+'（CLI用コードは以下に表示）。Scaleはどちらも'+fmt(sApply)+'。';}else $('offset-conversion').hidden=true;
 const ss=fmt(sApply,9),os=fmt(oApply,9);
 commandText=(fw==='bf'||fw==='inav'||fw==='inavvirtual')?`set ${names.scale} = ${ss}\nset ${names.offset} = ${os}\nsave`:`${names.scale} = ${ss}\n${names.offset} = ${os}`;
 $('commands').textContent=commandText;
 $('verification').replaceChildren();[[1,m1,p1],[2,m2,p2]].forEach(([i,m,p])=>{const tr=document.createElement('tr');[`${i}`,`${fmt(m,4)} A`,`${fmt(p,4)} A`,`${fmt(p-m,4)} A`].forEach(txt=>{const td=document.createElement('td');td.textContent=txt;tr.append(td)});$('verification').append(tr)});
 $('line-fit').textContent=`表示 D → 実測 I : I = ${fmt(a,8)} × D ${b<0?'−':'+'} ${fmt(Math.abs(b),8)} [A]。`; $('result-detail').hidden=false;computed={fw,s:sApply,o:oApply,a,b};
 }
-$('firmware').addEventListener('change',()=>{updatePlatform();$('old-scale').value='';$('old-offset').value='';resetResult();});
+$('firmware').addEventListener('change',()=>{$('inav-offset-source').value='gui';updatePlatform();$('old-scale').value='';$('old-offset').value='';resetResult();});
 $('monitor').addEventListener('change',()=>{updatePlatform();resetResult();});
+$('inav-offset-source').addEventListener('change',()=>{
+ const source=$('inav-offset-source').value;
+ const el=$('old-offset');
+ if(el.value.trim()!==''){
+  const x=Number(el.value);
+  if(Number.isFinite(x))el.value=source==='gui'?(x/10).toFixed(1):String(Math.round(x*10));
+ }
+ updatePlatform();
+ if(computed)calc();else resetResult();
+});
 $('calculate').addEventListener('click',calc);
-$('sample').addEventListener('click',()=>{const fw=$('firmware').value; $('old-scale').value=fw==='inavvirtual'?200:(fw==='bf'||fw==='inav')?179:17;$('old-offset').value=(fw==='bf'||fw==='inav'||fw==='inavvirtual')?0:.1;$('display-1').value=1;$('actual-1').value=1.43;$('display-2').value=10;$('actual-2').value=10.43;calc();});
+$('sample').addEventListener('click',()=>{
+ const fw=$('firmware').value;
+ if(fw==='inav'){
+  $('old-scale').value=100;$('old-offset').value=0;
+  $('display-1').value=0.6;$('actual-1').value=0.17;
+  $('display-2').value=1.24;$('actual-2').value=0.79;
+ }else{
+  $('old-scale').value=fw==='inavvirtual'?200:fw==='bf'?179:17;
+  $('old-offset').value=(fw==='bf'||fw==='inavvirtual')?0:.1;
+  $('display-1').value=1;$('actual-1').value=1.43;
+  $('display-2').value=10;$('actual-2').value=10.43;
+ }
+ calc();
+});
 $('clear').addEventListener('click',()=>{['old-scale','old-offset','display-1','actual-1','display-2','actual-2'].forEach(id=>$(id).value='');resetResult();});
 for(const id of ['old-scale','old-offset','display-1','actual-1','display-2','actual-2']){$(id).addEventListener('input',()=>{if(computed)calc();});$(id).addEventListener('keydown',e=>{if(e.key==='Enter')calc();});}
 $('copy').addEventListener('click',async()=>{if(!commandText)return;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(commandText);}else{const a=document.createElement('textarea');a.value=commandText;a.style.position='absolute';a.style.left='-9999px';document.body.append(a);a.select();if(!document.execCommand('copy'))throw new Error('copy failed');a.remove();}$('copy').textContent='コピーしました';setTimeout(()=>$('copy').textContent='設定値をコピー',1500);}catch(e){$('copy').textContent='コピー不可：選択して複製';setTimeout(()=>$('copy').textContent='設定値をコピー',2400);}});
